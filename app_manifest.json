@@ -1,0 +1,41 @@
+{
+  "app_name": "PFSA-ID Statement–Event Explorer",
+  "app_version": "V14-DEMO-1.0",
+  "compatible_pipeline": "PFSA-ID V14",
+  "inference_schema_version": 4,
+  "token_entity_types": [
+    "STATEMENT_DIRECT",
+    "STATEMENT_INDIRECT",
+    "PERSON",
+    "PERSONCOREF",
+    "ROLE",
+    "AFFILIATION",
+    "DATETIME",
+    "LOCATION",
+    "EVENT",
+    "ISSUE",
+    "CUE",
+    "CUECOREF"
+  ],
+  "relation_labels": [
+    "NONE",
+    "ATTRIBUTED_TO",
+    "HAS_ROLE",
+    "AFFILIATED_WITH",
+    "AT_TIME",
+    "AT_LOCATION",
+    "AT_EVENT",
+    "ABOUT_ISSUE"
+  ],
+  "formal_kg_relations": [
+    "ATTRIBUTED_TO",
+    "HAS_ROLE",
+    "AFFILIATED_WITH",
+    "AT_TIME",
+    "AT_LOCATION",
+    "AT_EVENT",
+    "ABOUT_ISSUE",
+    "SOURCE_ARTICLE"
+  ],
+  "deployment_policy": "student_model_only_no_llm_no_weak_supervision"
+}
