@@ -1,0 +1,135 @@
+{
+  "best_epoch": 3,
+  "best_validation_loss": 1.0504345600722267,
+  "checkpoint": {
+    "path": "pfsa_experiments/28082026/student_model_best.pt",
+    "sha256": "17396e1622fd3c06c2f0057596bd3a1f070858e2d6f771a8df16c9f91d189b25"
+  },
+  "completed_epochs": 3,
+  "configured_epochs": 3,
+  "data_summary": {
+    "documents_total": 1018,
+    "test_documents": 102,
+    "test_events": 735,
+    "test_statement_types": {
+      "DIRECT": 400,
+      "INDIRECT": 335
+    },
+    "train_documents": 814,
+    "train_events": 6136,
+    "train_relation_provenance": {
+      "DERIVED_FROM_GOLD_SPANS": 3328,
+      "WEAK_SUPERVISION": 2808
+    },
+    "train_statement_types": {
+      "DIRECT": 3328,
+      "INDIRECT": 2808
+    },
+    "training_events_total_all_splits": 7635,
+    "validation_documents": 102,
+    "validation_events": 764,
+    "validation_relation_provenance": {
+      "DERIVED_FROM_GOLD_SPANS": 432,
+      "WEAK_SUPERVISION": 332
+    },
+    "validation_statement_types": {
+      "DIRECT": 432,
+      "INDIRECT": 332
+    }
+  },
+  "fingerprint_payload": {
+    "dataset_sha256": "ce89b84cedee6ff50d4b624e17e8cd214ca4995fc69e17375304ea261393fcb8",
+    "fingerprint_version": 7,
+    "persisted_split_sha256": "f80407c1315c69bd046a37ef0901a96c2f345a19fe94438bb7c19c0ef44f04c9",
+    "relation_labels": [
+      "NONE",
+      "ATTRIBUTED_TO",
+      "HAS_ROLE",
+      "AFFILIATED_WITH",
+      "AT_TIME",
+      "AT_LOCATION",
+      "AT_EVENT",
+      "ABOUT_ISSUE"
+    ],
+    "split_sha256": "bbc9c77885c83a5ee3cef9a7eb36488b8990ade6dd198d03124e6b22e6280769",
+    "token_labels": [
+      "O",
+      "B-STATEMENT_DIRECT",
+      "I-STATEMENT_DIRECT",
+      "B-STATEMENT_INDIRECT",
+      "I-STATEMENT_INDIRECT",
+      "B-PERSON",
+      "I-PERSON",
+      "B-PERSONCOREF",
+      "I-PERSONCOREF",
+      "B-ROLE",
+      "I-ROLE",
+      "B-AFFILIATION",
+      "I-AFFILIATION",
+      "B-DATETIME",
+      "I-DATETIME",
+      "B-LOCATION",
+      "I-LOCATION",
+      "B-EVENT",
+      "I-EVENT",
+      "B-ISSUE",
+      "I-ISSUE",
+      "B-CUE",
+      "I-CUE",
+      "B-CUECOREF",
+      "I-CUECOREF"
+    ],
+    "train_supervision_sha256": "a00d0f10a822abb8a84ae1b03a6f2de2b964ddd2961cb0530cabf0adb10a0372",
+    "training_config": {
+      "architecture": "DocumentStatementStudent_v2_pinned_revision",
+      "batch_size": 4,
+      "dropout": 0.1,
+      "epochs": 3,
+      "experiment_version": "V14_CONFIGURABLE_GPU",
+      "learning_rate": 2e-05,
+      "max_length": 512,
+      "max_relation_negatives_per_positive": 2,
+      "relation_loss_weight": 1.0,
+      "scientific_lock_sha256": "48e15bcad6720343afe4a92eb51136633bb8612f132e50a6585ff4514d307026",
+      "seed": 42,
+      "software_versions": {
+        "huggingface_hub": "0.34.4",
+        "numpy": "2.2.2",
+        "pandas": "2.2.3",
+        "python": "3.12.6",
+        "scikit_learn": "1.9.0",
+        "snorkel": "0.10.0",
+        "torch": "2.8.0",
+        "transformers": "4.56.0"
+      },
+      "stride": 128,
+      "student_local_source_sha256": null,
+      "student_model_id": "indobenchmark/indobert-base-p1",
+      "student_resolved_revision": "c2cd0b51ddce6580eb35263b39b0a1e5fb0a39e2"
+    },
+    "validation_supervision_sha256": "921ae71af332f65f06244afecdebc4bb807e1035b64cc9351530b364a6b79163"
+  },
+  "manifest_schema_version": 7,
+  "split_sha256": "bbc9c77885c83a5ee3cef9a7eb36488b8990ade6dd198d03124e6b22e6280769",
+  "status": "complete",
+  "test_data_used_for_training": false,
+  "tokenizer_dir": "pfsa_experiments/28082026/student_tokenizer",
+  "tokenizer_files": [
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.txt"
+  ],
+  "training_complete": true,
+  "training_fingerprint": "062aed2136e90becc6d6ca87b78eb562838d61080fd5da1232cd3231a69efe74",
+  "upstream_artifacts": {
+    "dataset_path": "gold_corpus/kompas-pfsa-id-merge-04072021-eco-pol-law-metro-nusantara.jsonl",
+    "dataset_sha256": "ce89b84cedee6ff50d4b624e17e8cd214ca4995fc69e17375304ea261393fcb8",
+    "llm_final_file_sha256": "fa8e2edc36c4cc5fe0086f6950e653b504da333526efdd56aa044fac4ee86633",
+    "llm_final_path": "pfsa_experiments/28082026/llm_validated_annotations.jsonl",
+    "silver_events_file_sha256": "7a8b14749e078f90cf287e044e29e6859f43de757829d1e2b25c696337b88488",
+    "silver_events_path": "pfsa_experiments/28082026/silver_indirect_events.jsonl",
+    "training_events_file_sha256": "6d41549363aa97bdfd90f0e78d9df4e8663b189f5bfa203f5e09555da4e1ae70",
+    "training_events_path": "pfsa_experiments/28082026/training_statement_events.jsonl"
+  }
+}
