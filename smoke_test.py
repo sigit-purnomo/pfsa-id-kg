@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import torch
+
 from pfsa_inference import (
+    ENTITY2ID,
+    ENTITY_LABELS,
     REL_LABELS,
-    TOKEN_ENTITY_TYPES,
+    STATEMENT2ID,
+    STATEMENT_LABELS,
+    ConstrainedLinearChainCRF,
     build_nx_kg,
     events_to_dataframe,
     graph_edges_dataframe,
@@ -11,74 +20,44 @@ from pfsa_inference import (
 
 
 def main():
-    assert "PERSONCOREF" in TOKEN_ENTITY_TYPES
-    assert "CUECOREF" in TOKEN_ENTITY_TYPES
-    assert "ISSUE" in TOKEN_ENTITY_TYPES
-    assert "ABOUT_ISSUE" in REL_LABELS
+    assert "U-ROLE" in ENTITY2ID
+    assert "L-AFFILIATION" in ENTITY2ID
+    assert "U-STATEMENT_INDIRECT" in STATEMENT2ID
+    assert "ISSUE" not in " ".join(ENTITY_LABELS)
+    assert "ATTRIBUTED_TO" in REL_LABELS
 
-    event = {
-        "event_id": "stmt_smoke",
-        "doc_id": "demo",
+    crf = ConstrainedLinearChainCRF(STATEMENT_LABELS)
+    emissions = torch.zeros(1, 3, len(STATEMENT_LABELS))
+    emissions[0, 0, STATEMENT2ID["I-STATEMENT_INDIRECT"]] = 20.0
+    emissions[0, 0, STATEMENT2ID["U-STATEMENT_INDIRECT"]] = 10.0
+    mask = torch.tensor([[True, True, True]])
+    path = crf.decode(emissions, mask, default_id=STATEMENT2ID["O"])[0]
+    assert path[0] != STATEMENT2ID["I-STATEMENT_INDIRECT"], "CRF allowed an illegal BILUO start"
+
+    events = [{
+        "event_id": "evt_1",
+        "doc_id": "doc_1",
         "statement_type": "INDIRECT",
-        "statement": {
-            "text": "transparansi perlu ditingkatkan",
-            "evidence": "transparansi perlu ditingkatkan",
-            "start": 80,
-            "end": 111,
-            "confidence": 0.93,
-        },
-        "cue": {
-            "text": "Menurutnya",
-            "evidence": "Menurutnya",
-            "start": 68,
-            "end": 78,
-            "confidence": 0.91,
-            "label": "CUECOREF",
-        },
-        "speaker": {
-            "text": "Ia",
-            "evidence": "Ia",
-            "start": 40,
-            "end": 42,
-            "label": "PERSONCOREF",
-            "canonical": "Raka Pratama",
-            "mention_label": "PERSONCOREF",
-            "source_mention_label": "CUECOREF",
-            "coreference_via": "CUECOREF",
-            "coref_resolution_provenance": "DOCUMENT_HEURISTIC_FROM_PREDICTED_PERSON",
-            "relation_confidence": 0.87,
-        },
-        "issue": {
-            "text": "transparansi AI",
-            "evidence": "transparansi AI",
-            "start": 112,
-            "end": 127,
-            "label": "ISSUE",
-            "relation_confidence": 0.79,
-        },
-        "span_provenance": "STUDENT_MODEL_PREDICTION",
-        "relation_provenance": "STUDENT_MODEL_PREDICTION",
-    }
+        "statement": {"text": "Kebijakan perlu diperbaiki.", "start": 30, "end": 58, "confidence": .93},
+        "cue": {"text": "mengatakan", "start": 18, "end": 28, "label": "CUE", "confidence": .95},
+        "speaker": {"text": "Raka Pratama", "canonical": "Raka Pratama", "start": 0, "end": 12, "label": "PERSON", "mention_label": "PERSON", "relation_confidence": .90},
+        "role": {"text": "Ketua", "start": 13, "end": 18, "label": "ROLE", "relation_confidence": .88},
+        "affiliation": {"text": "Forum Digital", "start": 60, "end": 73, "label": "AFFILIATION", "relation_confidence": .84},
+        "datetime": None,
+        "location": None,
+        "utterance_event": None,
+        "issue": {"text": "Tata kelola digital menjadi perhatian publik.", "start": 80, "end": 124, "label": "ISSUE", "confidence": .91, "relation_confidence": .91},
+    }]
 
-    graph = build_nx_kg([event])
-    relations = {
-        attrs.get("relation")
-        for _, _, _, attrs in graph.edges(keys=True, data=True)
-    }
-    assert "ATTRIBUTED_TO" in relations
-    assert "ABOUT_ISSUE" in relations
-    assert graph.number_of_nodes() >= 4
+    graph = build_nx_kg(events)
+    rels = {d.get("relation") for *_x, d in graph.edges(data=True)}
+    assert "ATTRIBUTED_TO" in rels
+    assert "ABOUT_ISSUE" in rels
+    assert not events_to_dataframe(events).empty
+    assert not graph_edges_dataframe(graph).empty
+    assert rdf_bytes(events, "turtle")
 
-    event_df = events_to_dataframe([event])
-    assert event_df.iloc[0]["cue_label"] == "CUECOREF"
-    assert event_df.iloc[0]["speaker_mention_label"] == "PERSONCOREF"
-
-    edge_df = graph_edges_dataframe(graph)
-    speaker_edge = edge_df[edge_df["relation"] == "ATTRIBUTED_TO"].iloc[0]
-    assert speaker_edge["coreference_via"] == "CUECOREF"
-
-    assert len(rdf_bytes([event], "turtle")) > 0
-    print("PFSA-ID V14 Streamlit deployment smoke test: PASS")
+    print("PFSA-ID clean Streamlit deployment smoke test: PASS")
 
 
 if __name__ == "__main__":

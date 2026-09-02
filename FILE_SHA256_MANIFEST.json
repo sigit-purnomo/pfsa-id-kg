@@ -1,52 +1,12 @@
-[
-  {
-    "path": ".streamlit/config.toml",
-    "sha256": "b934c5dbec9a2cd0a56656698014cc2aa26dab8481aa7ddd8f74ee157a562266",
-    "bytes": 65
-  },
-  {
-    "path": "README.md",
-    "sha256": "b5a0808c0aef1f6dd945d0cce15018f4d9b78f61987308c40a8dbfbf529aa76f",
-    "bytes": 5777
-  },
-  {
-    "path": "app.py",
-    "sha256": "da580d5828ba48635d83e8ee715eefc247afd5638970b1eb3c674f2c9aebbe4b",
-    "bytes": 47127
-  },
-  {
-    "path": "app_manifest.json",
-    "sha256": "5bccfeac2a2b0bd1758dcff659ee00db71d2b1df5661f781541281861610995a",
-    "bytes": 812
-  },
-  {
-    "path": "export_model_bundle.py",
-    "sha256": "9bb9698bb122149421cdc1116dd06a072cf2184570760598c93f2346f13ed2e4",
-    "bytes": 6758
-  },
-  {
-    "path": "model_artifacts/PLACE_V14_MODEL_BUNDLE_HERE.txt",
-    "sha256": "e0767d66ffdb090321a0b2956fa23c6c525820e7ec3548615c26c4e296eb0b9d",
-    "bytes": 102
-  },
-  {
-    "path": "pfsa_inference.py",
-    "sha256": "54e6130ed72055f011ae4d21dd8e27b9ef4d67e5517a5866e42451d000565a2e",
-    "bytes": 44477
-  },
-  {
-    "path": "requirements.txt",
-    "sha256": "95ffe53711a2dfa1bda308cbaf3e96e8f0aaeb662b39298468640c8b9c7671bb",
-    "bytes": 160
-  },
-  {
-    "path": "sample_news.csv",
-    "sha256": "00224556b13e0a40af27c1a2543a2a0a26557532f8c0e72f1248811f022a520c",
-    "bytes": 715
-  },
-  {
-    "path": "smoke_test.py",
-    "sha256": "ff4f7f9224168bf4c1ba9632babd87833e59d69bbfcdc84dc5ba99f716369438",
-    "bytes": 2529
-  }
-]
+{
+  ".streamlit/config.toml": "9e81f52810a6661788f4657b2c18f75d02d5418fd1352bd8c88fc50779658ede",
+  "README.md": "f5f8c1b32959e5a78272dc0665d335d3ad8f0ce42dee4a7c8394c0686b848df9",
+  "app.py": "3dc1beac242649baafe23ec9f050d59e5bcb67588ea5d6f51973e2202cbc85a8",
+  "app_manifest.json": "93bdf554aa181fe4bf314c204e9eef9348a68cac43aa18eee6ec6c92bf5ada36",
+  "export_model_bundle.py": "6981c284efefd5118056650688d0dd8053b6da98422febe69a12fcf353611786",
+  "model_artifacts/PLACE_MODEL_BUNDLE_HERE.txt": "93103e98ffaaa06e34a43567363e278278a1bc3c7ac641b98d9a89260db3eebc",
+  "pfsa_inference.py": "346316d0de7af631d3df6604879a68445ffe2f8e177288fd02a5622cb4a1c517",
+  "requirements.txt": "e9a31f8f1eba1a53bcf971eb28fc5c2fca9f6a87d24a1392c11582f2f4c183c2",
+  "sample_news.csv": "23ac47aedc3f7292ba6c8fe9ad593d48c060927abab8939cff8bb32179c1e44b",
+  "smoke_test.py": "aa8dd77b5256a1271b1567215900b41aa069c3eec5ade85df8afb9a59bd77535"
+}
