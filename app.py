@@ -20,6 +20,7 @@ from pfsa_inference import (
     dataframe_to_csv_bytes,
     events_to_dataframe,
     events_to_jsonl_bytes,
+    filter_events_by_statement_type,
     graph_edges_dataframe,
     graphml_bytes,
     infer_with_disk_cache,
@@ -30,6 +31,7 @@ from pfsa_inference import (
     rdf_bytes,
     relation_rows_for_event,
     release_model_bundle,
+    statement_type_counts,
     spans_to_dataframe,
 )
 
@@ -39,6 +41,14 @@ DEFAULT_CACHE_DIR = os.getenv("PFSA_APP_CACHE_DIR", str(Path(__file__).resolve()
 DEFAULT_DEVICE = os.getenv("PFSA_APP_DEVICE", "auto")
 
 EXAMPLES = {
+    "Direct + indirect statements": {
+        "doc_id": "demo_direct_indirect",
+        "text": (
+            "Kepala Pusat Kebijakan Digital Arif Nugraha mengatakan, \"Audit sistem AI harus dapat ditelusuri sampai ke sumber datanya.\" "
+            "Ia menegaskan bahwa lembaga publik juga perlu menyimpan bukti keputusan otomatis. "
+            "Menurut Arif, dokumentasi yang lengkap penting agar masyarakat dapat memahami dasar sebuah keputusan."
+        ),
+    },
     "Indirect statement + source profile": {
         "doc_id": "demo_indirect_profile",
         "text": (
@@ -57,16 +67,8 @@ EXAMPLES = {
             "Menurutnya, transparansi penggunaan kecerdasan artifisial juga perlu ditingkatkan."
         ),
     },
-    "Multiple speakers": {
-        "doc_id": "demo_multiple_speakers",
-        "text": (
-            "Ketua Forum Teknologi Bima Wirawan menilai tata kelola AI perlu memiliki standar audit yang jelas. "
-            "Ia meminta lembaga publik menyimpan bukti keputusan otomatis. Peneliti kebijakan Nita Prameswari "
-            "mengatakan dokumentasi sumber data juga penting. Menurutnya, setiap keluaran sistem harus dapat "
-            "ditelusuri kembali ke bukti tekstual."
-        ),
-    },
 }
+
 
 st.set_page_config(page_title=APP_TITLE, page_icon="🔎", layout="wide", initial_sidebar_state="expanded")
 
@@ -81,7 +83,12 @@ st.markdown(
     .step-num {font-size: .72rem; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: .06em;}
     .step-title {font-weight: 700; margin-top: .15rem;}
     .step-text {font-size: .84rem; color: #64748b; margin-top: .2rem;}
-    .statement-box {border-left: 4px solid #2563eb; background: #eff6ff; border-radius: 10px; padding: .9rem 1rem; font-size: 1.05rem; line-height: 1.65;}
+    .statement-box {border-radius: 10px; padding: .9rem 1rem; font-size: 1.05rem; line-height: 1.65; border-left: 4px solid #64748b; background: #f8fafc;}
+    .statement-direct {border-left-color:#2563eb; background:#eff6ff;}
+    .statement-indirect {border-left-color:#d97706; background:#fffbeb;}
+    .type-badge {display:inline-block; margin:0 .35rem .45rem 0; padding:.18rem .5rem; border-radius:999px; font-size:.75rem; font-weight:700;}
+    .type-direct {background:#dbeafe; color:#1d4ed8; border:1px solid #93c5fd;}
+    .type-indirect {background:#fef3c7; color:#b45309; border:1px solid #fcd34d;}
     .evidence-box {border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem 1.1rem; line-height: 1.9; background: #fff;}
     .ev-statement {background:#dbeafe; border-bottom:2px solid #2563eb; padding:.06rem .1rem; border-radius:3px;}
     .ev-cue {background:#fef3c7; border-bottom:2px solid #d97706; padding:.06rem .1rem; border-radius:3px;}
@@ -105,9 +112,10 @@ def init_state():
         "bundle": None,
         "bundle_key": None,
         "result": None,
-        "news_text": EXAMPLES["Indirect statement + source profile"]["text"],
-        "doc_id": EXAMPLES["Indirect statement + source profile"]["doc_id"],
-        "example_name": "Indirect statement + source profile",
+        "news_text": EXAMPLES["Direct + indirect statements"]["text"],
+        "doc_id": EXAMPLES["Direct + indirect statements"]["doc_id"],
+        "example_name": "Direct + indirect statements",
+        "statement_type_filter": "All",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -141,7 +149,9 @@ def event_options(events: List[dict]) -> Dict[str, dict]:
         st_text = (event.get("statement") or {}).get("text", "")
         speaker = (event.get("speaker") or {}).get("canonical") or (event.get("speaker") or {}).get("text") or "Unknown speaker"
         short = st_text if len(st_text) <= 88 else st_text[:85] + "..."
-        out[f"{i}. {event.get('statement_type', '—')} · {speaker} · {short}"] = event
+        typ = str(event.get("statement_type") or "—").upper()
+        marker = "D" if typ == "DIRECT" else "I" if typ == "INDIRECT" else "•"
+        out[f"{i}. {marker} · {typ} · {speaker} · {short}"] = event
     return out
 
 
@@ -191,31 +201,95 @@ def render_legend():
 def graph_html(graph: nx.MultiDiGraph, height=610):
     if graph.number_of_nodes() == 0:
         return "<div style='padding:1rem'>No graph nodes.</div>"
-    net = Network(height=f"{height}px", width="100%", directed=True, bgcolor="#ffffff", font_color="#0f172a", cdn_resources="in_line")
-    shape = {"Article": "box", "StatementEvent": "dot"}
-    colors = {
-        "Article": "#e2e8f0", "StatementEvent": "#bfdbfe", "Person": "#bbf7d0", "Role": "#e9d5ff",
-        "Organization": "#f5d0fe", "DateTime": "#a5f3fc", "Location": "#fed7aa", "UtteranceEvent": "#cbd5e1", "Issue": "#fecdd3",
+
+    net = Network(
+        height=f"{height}px",
+        width="100%",
+        directed=True,
+        bgcolor="#ffffff",
+        font_color="#0f172a",
+        cdn_resources="in_line",
+    )
+
+    entity_colors = {
+        "Article": "#e2e8f0",
+        "Person": "#bbf7d0",
+        "Role": "#e9d5ff",
+        "Organization": "#f5d0fe",
+        "DateTime": "#a5f3fc",
+        "Location": "#fed7aa",
+        "UtteranceEvent": "#cbd5e1",
+        "Issue": "#fecdd3",
     }
+
     for node_id, attrs in graph.nodes(data=True):
         typ = attrs.get("node_type", "Entity")
         label = str(attrs.get("label") or attrs.get("content") or node_id)
-        if typ == "StatementEvent" and len(label) > 68:
-            label = label[:65] + "..."
-        title = "<br>".join(f"<b>{html.escape(str(k))}</b>: {html.escape(str(v))}" for k, v in attrs.items() if v not in (None, ""))
-        net.add_node(node_id, label=label, title=title, shape=shape.get(typ, "ellipse"), color=colors.get(typ, "#e5e7eb"), size=28 if typ == "StatementEvent" else 20)
+        shape = "ellipse"
+        color = entity_colors.get(typ, "#e5e7eb")
+        size = 20
+
+        if typ == "Article":
+            shape = "box"
+        elif typ == "StatementEvent":
+            stype = str(attrs.get("statement_type") or "").upper()
+            shape = "dot"
+            size = 30
+            if stype == "DIRECT":
+                color = "#93c5fd"
+                prefix = "DIRECT"
+            elif stype == "INDIRECT":
+                color = "#fcd34d"
+                prefix = "INDIRECT"
+            else:
+                color = "#cbd5e1"
+                prefix = "STATEMENT"
+            if len(label) > 64:
+                label = label[:61] + "..."
+            label = f"{prefix}\n{label}"
+
+        title = "<br>".join(
+            f"<b>{html.escape(str(k))}</b>: {html.escape(str(v))}"
+            for k, v in attrs.items() if v not in (None, "")
+        )
+        net.add_node(
+            node_id,
+            label=label,
+            title=title,
+            shape=shape,
+            color=color,
+            size=size,
+        )
+
     for source, target, _key, attrs in graph.edges(keys=True, data=True):
         rel = attrs.get("relation", "")
         conf = attrs.get("relation_confidence")
         label = rel if conf is None else f"{rel} ({float(conf):.2f})"
-        net.add_edge(source, target, label=label, arrows="to")
-    net.barnes_hut(gravity=-3800, central_gravity=.18, spring_length=150, spring_strength=.045, damping=.9)
+        source_attrs = graph.nodes[source] if source in graph.nodes else {}
+        stype = str(source_attrs.get("statement_type") or "").upper()
+        edge_color = "#2563eb" if stype == "DIRECT" else "#d97706" if stype == "INDIRECT" else "#64748b"
+        net.add_edge(source, target, label=label, arrows="to", color=edge_color)
+
+    net.barnes_hut(
+        gravity=-3800,
+        central_gravity=.18,
+        spring_length=150,
+        spring_strength=.045,
+        damping=.9,
+    )
     return net.generate_html(notebook=False)
 
 
 def event_detail(event):
     statement = event.get("statement") or {}
-    st.markdown(f'<div class="statement-box">{html.escape(statement.get("text") or "—")}</div>', unsafe_allow_html=True)
+    statement_type = str(event.get("statement_type") or "UNKNOWN").upper()
+    badge_class = "type-direct" if statement_type == "DIRECT" else "type-indirect" if statement_type == "INDIRECT" else ""
+    box_class = "statement-direct" if statement_type == "DIRECT" else "statement-indirect" if statement_type == "INDIRECT" else ""
+    st.markdown(
+        f'<span class="type-badge {badge_class}">{html.escape(statement_type)}</span>'
+        f'<div class="statement-box {box_class}">{html.escape(statement.get("text") or "—")}</div>',
+        unsafe_allow_html=True,
+    )
     rows = [
         ("Type", event.get("statement_type"), None),
         ("Cue", (event.get("cue") or {}).get("text"), (event.get("cue") or {}).get("label")),
@@ -234,12 +308,12 @@ def event_detail(event):
             st.dataframe(rel, hide_index=True, use_container_width=True)
 
 
-st.markdown(f'<div class="hero"><h1>{APP_TITLE}</h1><p>From Indonesian news text to evidence-grounded StatementEvents and an interactive knowledge graph.</p></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="hero"><h1>{APP_TITLE}</h1><p>Extract direct and indirect public-figure statements, inspect their evidence, and explore the resulting knowledge graph.</p></div>', unsafe_allow_html=True)
 
 steps = st.columns(3)
 steps[0].markdown('<div class="step"><div class="step-num">Step 1</div><div class="step-title">Enter news article</div><div class="step-text">Paste an Indonesian article or load an example.</div></div>', unsafe_allow_html=True)
-steps[1].markdown('<div class="step"><div class="step-num">Step 2</div><div class="step-title">Run inference</div><div class="step-text">BILUO-CRF spans, ISSUE sentence head, and relations.</div></div>', unsafe_allow_html=True)
-steps[2].markdown('<div class="step"><div class="step-num">Step 3</div><div class="step-title">Explore the KG</div><div class="step-text">Inspect evidence and model-generated graph relations.</div></div>', unsafe_allow_html=True)
+steps[1].markdown('<div class="step"><div class="step-num">Step 2</div><div class="step-title">Run inference</div><div class="step-text">Joint DIRECT + INDIRECT BILUO-CRF decoding, ISSUE sentence selection, and relations.</div></div>', unsafe_allow_html=True)
+steps[2].markdown('<div class="step"><div class="step-num">Step 3</div><div class="step-title">Explore the KG</div><div class="step-text">Compare DIRECT and INDIRECT StatementEvents and their graph relations.</div></div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("Model")
@@ -288,6 +362,13 @@ with st.sidebar:
             teacher = b.bundle_manifest.get("teacher_model_id")
             if teacher:
                 st.caption(f"Training teacher: {teacher}")
+            weights = b.bundle_manifest.get("model_selection_weights") or {}
+            if weights.get("direct") is not None and weights.get("indirect") is not None:
+                st.caption(
+                    "Checkpoint selection: "
+                    f"DIRECT {float(weights['direct']):.0%} · "
+                    f"INDIRECT {float(weights['indirect']):.0%}"
+                )
             st.caption(f"Inference schema: {APP_INFERENCE_SCHEMA_VERSION}")
             st.caption(f"Checkpoint: {b.checkpoint_sha256[:12]}…")
 
@@ -334,57 +415,128 @@ if result is not None:
     st.subheader("2. Extraction result")
     events = result["events"]
     df = events_to_dataframe(events)
-    direct = int((df["statement_type"] == "DIRECT").sum()) if not df.empty else 0
-    indirect = int((df["statement_type"] == "INDIRECT").sum()) if not df.empty else 0
+    counts = statement_type_counts(events)
     speakers = int(df["speaker"].dropna().nunique()) if not df.empty else 0
 
     m = st.columns(5)
-    m[0].metric("Statements", len(events))
-    m[1].metric("Direct", direct)
-    m[2].metric("Indirect", indirect)
+    m[0].metric("Statements", counts["ALL"])
+    m[1].metric("Direct", counts["DIRECT"])
+    m[2].metric("Indirect", counts["INDIRECT"])
     m[3].metric("Speakers", speakers)
     m[4].metric("Inference", f"{result['elapsed']:.2f}s")
 
     if not events:
-        st.info("No StatementEvent was produced for this article at the current relation threshold.")
+        st.info("No direct or indirect StatementEvent was produced for this article.")
     else:
-        options = event_options(events)
-        selected_label = st.selectbox("Statement to inspect", list(options.keys()))
-        selected_event = options[selected_label]
+        st.markdown("#### Statement type")
+        type_filter = st.radio(
+            "Filter extracted statements",
+            ["All", "Direct", "Indirect"],
+            horizontal=True,
+            label_visibility="collapsed",
+            key="statement_type_filter",
+        )
+        filtered_events = filter_events_by_statement_type(events, type_filter)
+        filtered_df = events_to_dataframe(filtered_events)
 
-        extraction_tab, evidence_tab, graph_tab = st.tabs(["Extraction", "Evidence", "Knowledge Graph"])
+        st.caption(
+            f"Showing {len(filtered_events)} of {len(events)} extracted StatementEvents. "
+            "The filter changes only the display; inference always decodes both DIRECT and INDIRECT labels."
+        )
 
-        with extraction_tab:
-            event_detail(selected_event)
-            with st.expander("All extracted statements"):
-                cols = ["statement_type", "statement", "statement_confidence", "cue", "cue_label", "speaker", "speaker_mention_label", "role", "affiliation", "datetime", "location", "utterance_event", "issue"]
-                st.dataframe(df[[c for c in cols if c in df.columns]], hide_index=True, use_container_width=True)
+        if not filtered_events:
+            st.info(f"No {type_filter.lower()} statements were detected in this article.")
+        else:
+            options = event_options(filtered_events)
+            selected_label = st.selectbox("Statement to inspect", list(options.keys()))
+            selected_event = options[selected_label]
 
-        with evidence_tab:
-            render_legend()
-            st.markdown(f'<div class="evidence-box">{highlighted_text(result["text"], selected_event)}</div>', unsafe_allow_html=True)
-            with st.expander("Detected BILUO spans"):
-                st.dataframe(spans_to_dataframe(result["spans"], result["doc_id"]), hide_index=True, use_container_width=True)
-            with st.expander("Raw StatementEvent JSON"):
-                st.json(selected_event)
+            extraction_tab, evidence_tab, graph_tab = st.tabs(["Extraction", "Evidence", "Knowledge Graph"])
 
-        with graph_tab:
-            scope = st.radio("Graph", ["Selected statement", "All statements"], horizontal=True)
-            graph_events = [selected_event] if scope == "Selected statement" else events
-            graph = build_nx_kg(graph_events)
-            gm = st.columns(3)
-            gm[0].metric("Nodes", graph.number_of_nodes())
-            gm[1].metric("Edges", graph.number_of_edges())
-            gm[2].metric("StatementEvents", len(graph_events))
-            components.html(graph_html(graph), height=630, scrolling=True)
-            with st.expander("Graph edges"):
-                st.dataframe(graph_edges_dataframe(graph), hide_index=True, use_container_width=True)
+            with extraction_tab:
+                event_detail(selected_event)
+                with st.expander("Statements in current filter", expanded=False):
+                    cols = [
+                        "statement_type", "statement", "statement_confidence", "cue", "cue_label",
+                        "speaker", "speaker_mention_label", "role", "affiliation", "datetime",
+                        "location", "utterance_event", "issue",
+                    ]
+                    st.dataframe(
+                        filtered_df[[c for c in cols if c in filtered_df.columns]],
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+
+            with evidence_tab:
+                render_legend()
+                st.markdown(
+                    f'<div class="evidence-box">{highlighted_text(result["text"], selected_event)}</div>',
+                    unsafe_allow_html=True,
+                )
+                with st.expander("Detected BILUO spans"):
+                    span_df = spans_to_dataframe(result["spans"], result["doc_id"])
+                    st.dataframe(span_df, hide_index=True, use_container_width=True)
+                with st.expander("Raw StatementEvent JSON"):
+                    st.json(selected_event)
+
+            with graph_tab:
+                st.markdown(
+                    '<span class="type-badge type-direct">DIRECT StatementEvent</span>'
+                    '<span class="type-badge type-indirect">INDIRECT StatementEvent</span>',
+                    unsafe_allow_html=True,
+                )
+                graph_scope = st.radio(
+                    "Graph scope",
+                    ["All extracted statements", "Current type filter", "Selected statement"],
+                    horizontal=True,
+                )
+                if graph_scope == "Selected statement":
+                    graph_events = [selected_event]
+                elif graph_scope == "Current type filter":
+                    graph_events = filtered_events
+                else:
+                    graph_events = events
+
+                graph = build_nx_kg(graph_events)
+                graph_counts = statement_type_counts(graph_events)
+                gm = st.columns(5)
+                gm[0].metric("Nodes", graph.number_of_nodes())
+                gm[1].metric("Edges", graph.number_of_edges())
+                gm[2].metric("Statements", graph_counts["ALL"])
+                gm[3].metric("Direct", graph_counts["DIRECT"])
+                gm[4].metric("Indirect", graph_counts["INDIRECT"])
+                components.html(graph_html(graph), height=630, scrolling=True)
+                st.caption(
+                    "Blue StatementEvent nodes are DIRECT; amber StatementEvent nodes are INDIRECT. "
+                    "Outgoing relation edges follow the same type color."
+                )
+                with st.expander("Graph edges"):
+                    st.dataframe(graph_edges_dataframe(graph), hide_index=True, use_container_width=True)
 
         with st.expander("Download results"):
             graph = build_nx_kg(events)
             d = st.columns(4)
-            d[0].download_button("Events JSONL", events_to_jsonl_bytes(events), f"{result['doc_id']}_events.jsonl", "application/x-ndjson", use_container_width=True)
-            d[1].download_button("Events CSV", dataframe_to_csv_bytes(df), f"{result['doc_id']}_events.csv", "text/csv", use_container_width=True)
-            d[2].download_button("GraphML", graphml_bytes(graph), f"{result['doc_id']}_kg.graphml", "application/xml", use_container_width=True)
-            d[3].download_button("RDF/Turtle", rdf_bytes(events, "turtle"), f"{result['doc_id']}_kg.ttl", "text/turtle", use_container_width=True)
-            st.caption("This graph is generated only from student-model predictions; the Streamlit app does not call the training-time LLM or weak-supervision pipeline.")
+            d[0].download_button(
+                "Events JSONL", events_to_jsonl_bytes(events),
+                f"{result['doc_id']}_events.jsonl", "application/x-ndjson",
+                use_container_width=True,
+            )
+            d[1].download_button(
+                "Events CSV", dataframe_to_csv_bytes(df),
+                f"{result['doc_id']}_events.csv", "text/csv",
+                use_container_width=True,
+            )
+            d[2].download_button(
+                "GraphML", graphml_bytes(graph),
+                f"{result['doc_id']}_kg.graphml", "application/xml",
+                use_container_width=True,
+            )
+            d[3].download_button(
+                "RDF/Turtle", rdf_bytes(events, "turtle"),
+                f"{result['doc_id']}_kg.ttl", "text/turtle",
+                use_container_width=True,
+            )
+            st.caption(
+                "Downloads contain both DIRECT and INDIRECT student-model predictions. "
+                "The deployment app does not call the training-time Qwen teacher."
+            )

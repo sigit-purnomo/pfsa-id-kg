@@ -17,7 +17,7 @@ import torch.nn as nn
 from rdflib import Graph, Literal, Namespace, RDF, URIRef
 from rdflib.namespace import XSD
 
-APP_INFERENCE_SCHEMA_VERSION = 5
+APP_INFERENCE_SCHEMA_VERSION = 6
 
 STATEMENT_ENTITY_TYPES = ["STATEMENT_DIRECT", "STATEMENT_INDIRECT"]
 ENTITY_CUE_TYPES = [
@@ -88,6 +88,26 @@ def normalize_doc_id(value: Any, text: str) -> str:
         if safe:
             return safe[:120]
     return stable_id(hashlib.sha1(text.encode("utf-8")).hexdigest(), prefix="doc")
+
+
+def filter_events_by_statement_type(events: List[dict], statement_type: str = "ALL") -> List[dict]:
+    """Filter predicted StatementEvents without changing model inference output."""
+    wanted = str(statement_type or "ALL").strip().upper()
+    if wanted in {"", "ALL"}:
+        return list(events)
+    if wanted not in {"DIRECT", "INDIRECT"}:
+        raise ValueError(f"Unsupported statement type filter: {statement_type}")
+    return [e for e in events if str(e.get("statement_type", "")).upper() == wanted]
+
+
+def statement_type_counts(events: List[dict]) -> Dict[str, int]:
+    counts = {"DIRECT": 0, "INDIRECT": 0}
+    for event in events:
+        typ = str(event.get("statement_type", "")).upper()
+        if typ in counts:
+            counts[typ] += 1
+    counts["ALL"] = counts["DIRECT"] + counts["INDIRECT"]
+    return counts
 
 
 def overlaps(a0: int, a1: int, b0: int, b1: int) -> bool:
@@ -493,6 +513,7 @@ def predict_statement_events(text: str, bundle: ModelBundle, doc_id: str, relati
             "event_id": stable_id(doc_id, st["start"], st["end"], si, "prediction", prefix="stmt"),
             "doc_id": doc_id,
             "statement_type": "DIRECT" if st["type"] == "STATEMENT_DIRECT" else "INDIRECT",
+            "statement_model_label": st["type"],
             "statement": {
                 "text": st["text"], "evidence": st["text"], "start": st["start"], "end": st["end"],
                 "confidence": st["confidence"],
@@ -739,6 +760,7 @@ def build_nx_kg(events: List[dict]) -> nx.MultiDiGraph:
             label=statement.get("text", ""),
             content=statement.get("text", ""),
             statement_type=event.get("statement_type"),
+            statement_model_label=event.get("statement_model_label"),
             confidence=float(statement.get("confidence", 0.0)),
             evidence_start=int(statement.get("start", -1)),
             evidence_end=int(statement.get("end", -1)),
@@ -787,6 +809,7 @@ def events_to_dataframe(events: List[dict]) -> pd.DataFrame:
         rows.append({
             "event_id": e.get("event_id"),
             "statement_type": e.get("statement_type"),
+            "statement_model_label": e.get("statement_model_label"),
             "statement": st.get("text"),
             "statement_confidence": st.get("confidence"),
             "cue": cue.get("text"),
@@ -833,7 +856,15 @@ def relation_rows_for_event(event: dict) -> List[dict]:
 def graph_edges_dataframe(graph: nx.MultiDiGraph) -> pd.DataFrame:
     rows = []
     for source, target, _key, attrs in graph.edges(keys=True, data=True):
-        rows.append({"source": source, "relation": attrs.get("relation"), "target": target, "confidence": attrs.get("relation_confidence"), "evidence": attrs.get("evidence_text")})
+        source_attrs = graph.nodes[source] if source in graph.nodes else {}
+        rows.append({
+            "source": source,
+            "statement_type": source_attrs.get("statement_type"),
+            "relation": attrs.get("relation"),
+            "target": target,
+            "confidence": attrs.get("relation_confidence"),
+            "evidence": attrs.get("evidence_text"),
+        })
     return pd.DataFrame(rows)
 
 

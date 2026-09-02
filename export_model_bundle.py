@@ -117,14 +117,31 @@ def main():
         if p.exists():
             shutil.copy2(p, destination / name)
 
+    model_selection_weights = {
+        "direct": training_config.get("model_selection_direct_weight"),
+        "indirect": training_config.get("model_selection_indirect_weight"),
+        "entity": training_config.get("model_selection_entity_weight"),
+        "issue": training_config.get("model_selection_issue_weight"),
+        "relation": training_config.get("model_selection_relation_weight"),
+    }
+    if all(v is None for v in model_selection_weights.values()):
+        model_selection_weights = None
+
     bundle_manifest = {
-        "bundle_schema_version": 3,
+        "bundle_schema_version": 4,
         "deployment_architecture": "dual_biluo_crf_issue_sentence_relation",
+        "statement_types": ["DIRECT", "INDIRECT"],
         "training_fingerprint": manifest.get("training_fingerprint"),
         "checkpoint_sha256": checkpoint_sha,
         "student_model_id": model_id,
         "student_resolved_revision": resolved_revision,
         "teacher_model_id": find_teacher_model(source),
+        "model_selection_weights": model_selection_weights,
+        "balanced_direct_indirect_selection": bool(
+            model_selection_weights
+            and model_selection_weights.get("direct") is not None
+            and model_selection_weights.get("indirect") is not None
+        ),
         "statement_labels": STATEMENT_LABELS,
         "entity_labels": ENTITY_LABELS,
         "relation_labels": REL_LABELS,
