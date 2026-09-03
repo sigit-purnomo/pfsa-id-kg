@@ -1,0 +1,12 @@
+{
+  "bundle_version": 1,
+  "training_fingerprint": "090526a5a9f59eb0dcad413fea76fccc906dec8f5c5d764540a59e424eab764e",
+  "checkpoint_sha256": "294f78c1b778b9a89cc86235e7b2cc5a5c3943df7884268c3f8b5f56cead0fad",
+  "student_model_id": "indobenchmark/indobert-base-p1",
+  "files": {
+    "checkpoint": "student_model_best.pt",
+    "training_manifest": "student_model_manifest.json",
+    "tokenizer": "student_tokenizer/",
+    "encoder_config": "student_encoder_config/"
+  }
+}

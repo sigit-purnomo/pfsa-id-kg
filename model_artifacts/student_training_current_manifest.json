@@ -1,113 +1,4 @@
 {
-  "best_epoch": 3,
-  "best_validation_loss": 16.982713575164478,
-  "best_validation_metrics": {
-    "composite_score": 0.5876390891077988,
-    "direct_exact_f1": 0.8993576017130622,
-    "entity_macro_exact_f1": 0.6691227488829229,
-    "indirect_exact_f1": 0.0588235294117647,
-    "issue_top1_exact_accuracy": 0.96,
-    "loss": 16.982713575164478,
-    "n_issue_docs": 100,
-    "relation_macro_f1_excluding_none": 0.7287604880460928,
-    "span_metrics": {
-      "AFFILIATION": {
-        "f1": 0.5374449339207049,
-        "fn": 55,
-        "fp": 50,
-        "precision": 0.5495495495495496,
-        "recall": 0.5258620689655172,
-        "tp": 61
-      },
-      "CUE": {
-        "f1": 0.8927335640138409,
-        "fn": 9,
-        "fp": 22,
-        "precision": 0.8543046357615894,
-        "recall": 0.9347826086956522,
-        "tp": 129
-      },
-      "CUECOREF": {
-        "f1": 0.9112426035502958,
-        "fn": 4,
-        "fp": 11,
-        "precision": 0.875,
-        "recall": 0.9506172839506173,
-        "tp": 77
-      },
-      "DATETIME": {
-        "f1": 0.7558139534883722,
-        "fn": 4,
-        "fp": 38,
-        "precision": 0.6310679611650486,
-        "recall": 0.9420289855072463,
-        "tp": 65
-      },
-      "EVENT": {
-        "f1": 0.6282051282051282,
-        "fn": 28,
-        "fp": 30,
-        "precision": 0.620253164556962,
-        "recall": 0.6363636363636364,
-        "tp": 49
-      },
-      "LOCATION": {
-        "f1": 0.44117647058823534,
-        "fn": 30,
-        "fp": 8,
-        "precision": 0.6521739130434783,
-        "recall": 0.3333333333333333,
-        "tp": 15
-      },
-      "PERSON": {
-        "f1": 0.6810810810810811,
-        "fn": 35,
-        "fp": 83,
-        "precision": 0.6028708133971292,
-        "recall": 0.782608695652174,
-        "tp": 126
-      },
-      "PERSONCOREF": {
-        "f1": 0.5576923076923077,
-        "fn": 53,
-        "fp": 39,
-        "precision": 0.5979381443298969,
-        "recall": 0.5225225225225225,
-        "tp": 58
-      },
-      "ROLE": {
-        "f1": 0.6167146974063401,
-        "fn": 63,
-        "fp": 70,
-        "precision": 0.6045197740112994,
-        "recall": 0.6294117647058823,
-        "tp": 107
-      },
-      "STATEMENT_DIRECT": {
-        "f1": 0.8993576017130622,
-        "fn": 3,
-        "fp": 44,
-        "precision": 0.8267716535433071,
-        "recall": 0.9859154929577465,
-        "tp": 210
-      },
-      "STATEMENT_INDIRECT": {
-        "f1": 0.0588235294117647,
-        "fn": 10,
-        "fp": 22,
-        "precision": 0.043478260869565216,
-        "recall": 0.09090909090909091,
-        "tp": 1
-      }
-    },
-    "statement_macro_exact_f1": 0.4790905655624135
-  },
-  "checkpoint": {
-    "path": "pfsa_experiments/PFSA_QWEN3B_02092026/student_model_best.pt",
-    "sha256": "294f78c1b778b9a89cc86235e7b2cc5a5c3943df7884268c3f8b5f56cead0fad"
-  },
-  "completed_epochs": 5,
-  "configured_epochs": 6,
   "data_summary": {
     "documents_total": 1018,
     "test_documents": 102,
@@ -251,14 +142,8 @@
   },
   "manifest_schema_version": 8,
   "split_sha256": "bbc9c77885c83a5ee3cef9a7eb36488b8990ade6dd198d03124e6b22e6280769",
-  "status": "complete",
+  "status": "current_expected_training_configuration",
   "test_data_used_for_training": false,
-  "tokenizer_dir": "pfsa_experiments/PFSA_QWEN3B_02092026/student_tokenizer",
-  "tokenizer_files": [
-    "tokenizer.json",
-    "tokenizer_config.json"
-  ],
-  "training_complete": true,
   "training_fingerprint": "090526a5a9f59eb0dcad413fea76fccc906dec8f5c5d764540a59e424eab764e",
   "upstream_artifacts": {
     "dataset_path": "gold_corpus/kompas-pfsa-id-merge-04072021-eco-pol-law-metro-nusantara.jsonl",
