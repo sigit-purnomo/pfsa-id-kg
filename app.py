@@ -4,6 +4,7 @@ import gc
 import hashlib
 import html
 import os
+import re
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
