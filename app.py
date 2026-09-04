@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import hashlib
 import html
 import os
 import time
@@ -100,7 +101,11 @@ st.markdown(
     .ev-event {background:#f1f5f9; border-bottom:2px solid #475569; padding:.06rem .1rem; border-radius:3px;}
     .ev-issue {background:#ffe4e6; border-bottom:2px solid #e11d48; padding:.06rem .1rem; border-radius:3px;}
     .legend {display:inline-block; margin:.1rem .18rem .4rem 0; padding:.16rem .42rem; border-radius:999px; border:1px solid #d1d5db; font-size:.75rem;}
+    .statement-position {font-size:.82rem; color:#64748b; margin-top:.15rem; margin-bottom:.65rem;}
+    .view-heading {font-size:.82rem; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.06em; margin:.9rem 0 .45rem 0;}
+    .nav-help {font-size:.78rem; color:#64748b; margin-top:.2rem;}
     div[data-testid="stMetric"] {border: 1px solid #e2e8f0; border-radius: 12px; padding: .55rem .7rem;}
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] {font-weight:800;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -116,6 +121,9 @@ def init_state():
         "doc_id": EXAMPLES["Direct + indirect statements"]["doc_id"],
         "example_name": "Direct + indirect statements",
         "statement_type_filter": "All",
+        "statement_nav_index": 0,
+        "statement_nav_scope": None,
+        "detail_view": "Extraction",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -448,12 +456,93 @@ if result is not None:
             st.info(f"No {type_filter.lower()} statements were detected in this article.")
         else:
             options = event_options(filtered_events)
-            selected_label = st.selectbox("Statement to inspect", list(options.keys()))
+            option_labels = list(options.keys())
+
+            # The navigator scope changes whenever the visible statement set changes.
+            # This avoids carrying a stale selection across filters or new inference results.
+            event_signature = "|".join(
+                str(e.get("event_id") or f"{e.get('statement_type')}:{(e.get('statement') or {}).get('start')}:{(e.get('statement') or {}).get('end')}")
+                for e in filtered_events
+            )
+            nav_scope = hashlib.sha1(
+                f"{result['doc_id']}|{type_filter}|{event_signature}".encode("utf-8")
+            ).hexdigest()[:12]
+            selector_key = f"statement_selector_{nav_scope}"
+
+            if st.session_state.get("statement_nav_scope") != nav_scope:
+                st.session_state.statement_nav_scope = nav_scope
+                st.session_state.statement_nav_index = 0
+                st.session_state[selector_key] = option_labels[0]
+
+            current_index = int(st.session_state.get("statement_nav_index", 0))
+            current_index = max(0, min(current_index, len(option_labels) - 1))
+
+            st.markdown("#### Browse extracted statements")
+            nav_prev, nav_select, nav_next = st.columns([1.15, 7.7, 1.15])
+            nav_prev.markdown('<div style="height:1.65rem"></div>', unsafe_allow_html=True)
+            nav_next.markdown('<div style="height:1.65rem"></div>', unsafe_allow_html=True)
+
+            prev_clicked = nav_prev.button(
+                "← Previous",
+                use_container_width=True,
+                disabled=current_index <= 0,
+                key=f"prev_statement_{nav_scope}",
+            )
+            next_clicked = nav_next.button(
+                "Next →",
+                use_container_width=True,
+                disabled=current_index >= len(option_labels) - 1,
+                key=f"next_statement_{nav_scope}",
+            )
+
+            if prev_clicked or next_clicked:
+                current_index += -1 if prev_clicked else 1
+                current_index = max(0, min(current_index, len(option_labels) - 1))
+                st.session_state.statement_nav_index = current_index
+                st.session_state[selector_key] = option_labels[current_index]
+                st.rerun()
+
+            selected_label = nav_select.selectbox(
+                "Statement to inspect",
+                option_labels,
+                index=current_index,
+                key=selector_key,
+            )
+            selected_index = option_labels.index(selected_label)
+            st.session_state.statement_nav_index = selected_index
             selected_event = options[selected_label]
 
-            extraction_tab, evidence_tab, graph_tab = st.tabs(["Extraction", "Evidence", "Knowledge Graph"])
+            selected_type = str(selected_event.get("statement_type") or "UNKNOWN").upper()
+            st.markdown(
+                f'<div class="statement-position">Statement {selected_index + 1} of {len(filtered_events)} · '
+                f'{html.escape(selected_type)} · use Previous/Next to browse sequentially.</div>',
+                unsafe_allow_html=True,
+            )
 
-            with extraction_tab:
+            # A persistent three-button view menu is clearer than subtle native tabs and
+            # preserves the active view when Previous/Next triggers a rerun.
+            st.markdown('<div class="view-heading">View details</div>', unsafe_allow_html=True)
+            view_cols = st.columns(3)
+            view_specs = [
+                ("Extraction", "📋 Extraction"),
+                ("Evidence", "🔎 Evidence"),
+                ("Knowledge Graph", "🕸 Knowledge Graph"),
+            ]
+            active_view = st.session_state.get("detail_view", "Extraction")
+            for col, (view_name, button_label) in zip(view_cols, view_specs):
+                if col.button(
+                    button_label,
+                    use_container_width=True,
+                    type="primary" if active_view == view_name else "secondary",
+                    key=f"view_{view_name.replace(' ', '_').lower()}",
+                ):
+                    if active_view != view_name:
+                        st.session_state.detail_view = view_name
+                        st.rerun()
+
+            active_view = st.session_state.get("detail_view", "Extraction")
+
+            if active_view == "Extraction":
                 event_detail(selected_event)
                 with st.expander("Statements in current filter", expanded=False):
                     cols = [
@@ -467,7 +556,7 @@ if result is not None:
                         use_container_width=True,
                     )
 
-            with evidence_tab:
+            elif active_view == "Evidence":
                 render_legend()
                 st.markdown(
                     f'<div class="evidence-box">{highlighted_text(result["text"], selected_event)}</div>',
@@ -479,7 +568,7 @@ if result is not None:
                 with st.expander("Raw StatementEvent JSON"):
                     st.json(selected_event)
 
-            with graph_tab:
+            else:
                 st.markdown(
                     '<span class="type-badge type-direct">DIRECT StatementEvent</span>'
                     '<span class="type-badge type-indirect">INDIRECT StatementEvent</span>',

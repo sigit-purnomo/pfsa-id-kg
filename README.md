@@ -31,6 +31,9 @@ The deployment app does **not** run Qwen. Qwen2.5-3B-Instruct may remain the tra
 - DIRECT statement count;
 - INDIRECT statement count;
 - statement-type filter: **All / Direct / Indirect**;
+- a **Previous / Next** navigator for sequential statement inspection;
+- a prominent three-button view menu: **Extraction / Evidence / Knowledge Graph**;
+- the active view is preserved while browsing statements;
 - exact source evidence and BILUO spans;
 - statement-event relations;
 - an interactive knowledge graph where:
@@ -83,7 +86,8 @@ The selected physical GPU then appears as logical `cuda:0` inside the applicatio
 3. Click **Analyze article**.
 4. Review total, DIRECT, and INDIRECT extraction counts.
 5. Filter statement type if needed.
-6. Inspect extraction evidence and the Knowledge Graph.
+6. Browse extracted statements with **Previous / Next** or the statement selector.
+7. Switch between the clearly separated **Extraction / Evidence / Knowledge Graph** views.
 
 ## Knowledge graph
 
