@@ -41,8 +41,11 @@ DEFAULT_ARTIFACT_DIR = os.getenv("PFSA_MODEL_ARTIFACT_DIR", str(Path(__file__).r
 DEFAULT_CACHE_DIR = os.getenv("PFSA_APP_CACHE_DIR", str(Path(__file__).resolve().parent / "runtime_cache"))
 DEFAULT_DEVICE = os.getenv("PFSA_APP_DEVICE", "auto")
 
-EXAMPLES = {
-    "Direct + indirect statements": {
+APP_DIR = Path(__file__).resolve().parent
+SAMPLE_NEWS_PATH = APP_DIR / "sample_news.csv"
+
+FALLBACK_EXAMPLES = {
+    "demo_direct_indirect": {
         "doc_id": "demo_direct_indirect",
         "text": (
             "Kepala Pusat Kebijakan Digital Arif Nugraha mengatakan, \"Audit sistem AI harus dapat ditelusuri sampai ke sumber datanya.\" "
@@ -50,25 +53,66 @@ EXAMPLES = {
             "Menurut Arif, dokumentasi yang lengkap penting agar masyarakat dapat memahami dasar sebuah keputusan."
         ),
     },
-    "Indirect statement + source profile": {
-        "doc_id": "demo_indirect_profile",
+    "demo_indirect": {
+        "doc_id": "demo_indirect",
         "text": (
-            "Nahdlatul Ulama di bawah kepemimpinan Rais Aam Ahmad Syakir dan Ketua Umum Hasan Mahmud "
-            "diharapkan tetap menjaga jarak dengan penguasa. Pengajar Departemen Politik dan Pemerintahan "
-            "Universitas Nusantara, Abdul Karim, mengatakan Nahdlatul Ulama perlu menguatkan kembali perannya "
-            "sebagai elemen masyarakat sipil di tengah pelemahan demokrasi yang terjadi belakangan ini. "
-            "Menurutnya, organisasi masyarakat sipil perlu menjaga daya kritis terhadap kekuasaan."
-        ),
-    },
-    "Indirect statement + CUECOREF": {
-        "doc_id": "demo_coref",
-        "text": (
-            "Direktur Pusat Kebijakan Digital Raka Pratama mengatakan pemerintah perlu memperkuat perlindungan "
-            "data masyarakat. Ia menambahkan bahwa regulasi baru harus memberikan mekanisme pengaduan yang jelas. "
+            "Direktur Pusat Kebijakan Digital Raka Pratama mengatakan pemerintah perlu memperkuat perlindungan data masyarakat. "
+            "Ia menambahkan bahwa regulasi baru harus memberikan mekanisme pengaduan yang jelas. "
             "Menurutnya, transparansi penggunaan kecerdasan artifisial juga perlu ditingkatkan."
         ),
     },
 }
+
+
+def _sample_label(row: dict, index: int) -> str:
+    title = str(
+        row.get("title")
+        or row.get("name")
+        or row.get("label")
+        or row.get("doc_id")
+        or f"Sample {index + 1}"
+    ).strip()
+    preview = re.sub(r"\\s+", " ", str(row.get("text") or "")).strip()
+    if len(preview) > 72:
+        preview = preview[:69] + "..."
+    return f"{title} · {preview}" if preview else title
+
+
+def load_sample_news(path: Path = SAMPLE_NEWS_PATH) -> Dict[str, dict]:
+    """Load sample_news.csv automatically and return display-label -> article mapping."""
+    samples: Dict[str, dict] = {}
+
+    if path.exists():
+        try:
+            df = pd.read_csv(path)
+            required = {"doc_id", "text"}
+            if required.issubset(df.columns):
+                for i, row in enumerate(df.fillna("").to_dict("records")):
+                    doc_id = str(row.get("doc_id") or "").strip()
+                    article_text = str(row.get("text") or "").strip()
+                    if not article_text:
+                        continue
+                    if not doc_id:
+                        doc_id = f"sample_{i + 1:03d}"
+                    item = {**row, "doc_id": doc_id, "text": article_text}
+                    label = _sample_label(item, i)
+                    # Keep labels unique even when titles/doc_ids repeat.
+                    if label in samples:
+                        label = f"{label} [{i + 1}]"
+                    samples[label] = item
+        except Exception:
+            samples = {}
+
+    if not samples:
+        for i, item in enumerate(FALLBACK_EXAMPLES.values()):
+            label = _sample_label(item, i)
+            samples[label] = dict(item)
+
+    return samples
+
+
+SAMPLE_NEWS = load_sample_news()
+
 
 
 st.set_page_config(page_title=APP_TITLE, page_icon="🔎", layout="wide", initial_sidebar_state="expanded")
@@ -90,12 +134,20 @@ st.markdown(
     .type-badge {display:inline-block; margin:0 .35rem .45rem 0; padding:.18rem .5rem; border-radius:999px; font-size:.75rem; font-weight:700;}
     .type-direct {background:#dbeafe; color:#1d4ed8; border:1px solid #93c5fd;}
     .type-indirect {background:#fef3c7; color:#b45309; border:1px solid #fcd34d;}
-    .evidence-box {border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem 1.1rem; line-height: 1.9; background: #fff;}
+    .evidence-box {border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem 1.1rem; line-height: 2.05; background: #fff;}
     .ev-statement {background:#dbeafe; border-bottom:2px solid #2563eb; padding:.06rem .1rem; border-radius:3px;}
     .ev-statement-direct {background:#dbeafe; border-bottom:2px solid #2563eb; padding:.06rem .1rem; border-radius:3px;}
-    .ev-statement-indirect {background:#fef3c7; border-bottom:2px solid #d97706; padding:.06rem .1rem; border-radius:3px;}
-    .ev-has-issue {box-shadow: inset 0 -3px 0 #e11d48;}
-    .ev-cue {background:#fef3c7; border-bottom:2px solid #d97706; padding:.06rem .1rem; border-radius:3px;}
+    .ev-statement-indirect {background:#fff3cd; border-bottom:2px solid #d97706; padding:.06rem .1rem; border-radius:3px;}
+    .ev-cue {background:#fef3c7; border-bottom:2px solid #ca8a04; padding:.06rem .1rem; border-radius:3px;}
+    .ev-speaker {background:#dcfce7; border-bottom:2px solid #16a34a; padding:.06rem .1rem; border-radius:3px;}
+    .ev-role {background:#f3e8ff; border-bottom:2px solid #9333ea; padding:.06rem .1rem; border-radius:3px;}
+    .ev-affiliation {background:#fae8ff; border-bottom:2px solid #c026d3; padding:.06rem .1rem; border-radius:3px;}
+    .ev-datetime {background:#cffafe; border-bottom:2px solid #0891b2; padding:.06rem .1rem; border-radius:3px;}
+    .ev-location {background:#ffedd5; border-bottom:2px solid #ea580c; padding:.06rem .1rem; border-radius:3px;}
+    .ev-event {background:#f1f5f9; border-bottom:2px solid #475569; padding:.06rem .1rem; border-radius:3px;}
+    .ev-issue {background:#ffe4e6; border-bottom:2px solid #e11d48; padding:.06rem .1rem; border-radius:3px;}
+    .in-direct-statement {outline:1px solid rgba(37,99,235,.42); outline-offset:1px;}
+    .in-indirect-statement {outline:1px solid rgba(217,119,6,.48); outline-offset:1px;}
     .ev-speaker {background:#dcfce7; border-bottom:2px solid #16a34a; padding:.06rem .1rem; border-radius:3px;}
     .ev-role {background:#f3e8ff; border-bottom:2px solid #9333ea; padding:.06rem .1rem; border-radius:3px;}
     .ev-affiliation {background:#fae8ff; border-bottom:2px solid #c026d3; padding:.06rem .1rem; border-radius:3px;}
@@ -116,13 +168,15 @@ st.markdown(
 
 
 def init_state():
+    first_sample = next(iter(SAMPLE_NEWS)) if SAMPLE_NEWS else None
     defaults = {
         "bundle": None,
         "bundle_key": None,
         "result": None,
-        "news_text": EXAMPLES["Direct + indirect statements"]["text"],
-        "doc_id": EXAMPLES["Direct + indirect statements"]["doc_id"],
-        "example_name": "Direct + indirect statements",
+        "article_source_mode": "Sample news",
+        "sample_news_selection": first_sample,
+        "custom_doc_id": "",
+        "custom_news_text": "",
         "statement_type_filter": "All",
         "statement_nav_index": 0,
         "statement_nav_scope": None,
@@ -198,59 +252,140 @@ def highlighted_text(text, event):
     return "".join(parts).replace("\n", "<br>")
 
 
-def evidence_spans_for_events(events: List[dict]) -> List[dict]:
-    """Return statement and ISSUE evidence for all currently visible events."""
+def _speaker_evidence_label(obj: dict) -> str:
+    label = str(
+        obj.get("mention_label")
+        or obj.get("label")
+        or "PERSON"
+    ).upper()
+    return label if label in {"PERSON", "PERSONCOREF"} else "PERSON"
+
+
+def _cue_evidence_label(obj: dict) -> str:
+    label = str(obj.get("label") or "CUE").upper()
+    return label if label in {"CUE", "CUECOREF"} else "CUE"
+
+
+def event_evidence_spans(event: dict) -> List[dict]:
+    """Return every evidence field for one StatementEvent."""
+    statement_type = str(event.get("statement_type") or "").upper()
+    event_id = event.get("event_id")
     spans = []
-    seen = set()
+
+    field_specs = [
+        (
+            "statement",
+            (
+                "STATEMENT_DIRECT"
+                if statement_type == "DIRECT"
+                else "STATEMENT_INDIRECT"
+            ),
+            (
+                "ev-statement-direct"
+                if statement_type == "DIRECT"
+                else "ev-statement-indirect"
+            ),
+        ),
+        ("cue", None, "ev-cue"),
+        ("speaker", None, "ev-speaker"),
+        ("role", "ROLE", "ev-role"),
+        ("affiliation", "AFFILIATION", "ev-affiliation"),
+        ("datetime", "DATETIME", "ev-datetime"),
+        ("location", "LOCATION", "ev-location"),
+        ("utterance_event", "EVENT", "ev-event"),
+        ("issue", "ISSUE", "ev-issue"),
+    ]
+
+    for field, fixed_label, css in field_specs:
+        obj = event.get(field)
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("start") is None or obj.get("end") is None:
+            continue
+
+        start, end = int(obj["start"]), int(obj["end"])
+        if start >= end:
+            continue
+
+        if field == "speaker":
+            label = _speaker_evidence_label(obj)
+        elif field == "cue":
+            label = _cue_evidence_label(obj)
+        else:
+            label = fixed_label
+
+        spans.append({
+            "event_id": event_id,
+            "statement_type": statement_type,
+            "field": field,
+            "label": label,
+            "css": css,
+            "start": start,
+            "end": end,
+        })
+
+    return spans
+
+
+def evidence_spans_for_events(events: List[dict]) -> List[dict]:
+    """Collect all evidence labels for the visible StatementEvents."""
+    merged = {}
 
     for event in events:
-        statement_type = str(event.get("statement_type") or "").upper()
-
-        statement = event.get("statement") or {}
-        if statement.get("start") is not None and statement.get("end") is not None:
-            start, end = int(statement["start"]), int(statement["end"])
-            label = (
-                "DIRECT statement"
-                if statement_type == "DIRECT"
-                else "INDIRECT statement"
+        for span in event_evidence_spans(event):
+            key = (
+                span["start"],
+                span["end"],
+                span["field"],
+                span["label"],
+                span["statement_type"],
             )
-            key = (start, end, label)
-            if key not in seen:
-                spans.append({
-                    "event_id": event.get("event_id"),
-                    "statement_type": statement_type,
-                    "field": "statement",
-                    "label": label,
-                    "start": start,
-                    "end": end,
-                })
-                seen.add(key)
-
-        issue = event.get("issue") or {}
-        if issue.get("start") is not None and issue.get("end") is not None:
-            start, end = int(issue["start"]), int(issue["end"])
-            key = (start, end, "ISSUE")
-            if key not in seen:
-                spans.append({
-                    "event_id": event.get("event_id"),
-                    "statement_type": statement_type,
-                    "field": "issue",
-                    "label": "ISSUE",
-                    "start": start,
-                    "end": end,
-                })
-                seen.add(key)
+            if key not in merged:
+                merged[key] = {
+                    **span,
+                    "event_ids": [span.get("event_id")],
+                }
+            else:
+                eid = span.get("event_id")
+                if eid not in merged[key]["event_ids"]:
+                    merged[key]["event_ids"].append(eid)
 
     return sorted(
-        spans,
-        key=lambda s: (s["start"], s["end"], s["label"]),
+        merged.values(),
+        key=lambda s: (
+            s["start"],
+            -(s["end"] - s["start"]),
+            s["field"],
+            s["label"],
+        ),
     )
 
 
+EVIDENCE_FIELD_PRIORITY = {
+    # More specific labels override the STATEMENT background when they overlap.
+    "cue": 90,
+    "speaker": 85,
+    "role": 80,
+    "affiliation": 75,
+    "datetime": 70,
+    "location": 65,
+    "utterance_event": 60,
+    "issue": 55,
+    "statement": 10,
+}
+
+
 def highlighted_evidence_text(text: str, events: List[dict]) -> str:
-    """Highlight all visible statement spans and their ISSUE evidence."""
+    """Render all evidence labels without allowing STATEMENT to hide other labels.
+
+    The article is segmented at every evidence boundary. For each segment, the
+    most specific active evidence label controls the background color. If that
+    segment also belongs to a DIRECT/INDIRECT statement, a thin outline keeps
+    the statement membership visible.
+    """
     spans = [
-        s for s in evidence_spans_for_events(events)
+        s
+        for s in evidence_spans_for_events(events)
         if 0 <= s["start"] < s["end"] <= len(text)
     ]
     if not spans:
@@ -263,47 +398,75 @@ def highlighted_evidence_text(text: str, events: List[dict]) -> str:
     boundaries = sorted(boundaries)
 
     parts = []
+
     for left, right in zip(boundaries[:-1], boundaries[1:]):
         if left >= right:
             continue
 
-        segment = html.escape(text[left:right])
+        raw_segment = text[left:right]
+        segment = html.escape(raw_segment)
+
         active = [
-            s for s in spans
+            s
+            for s in spans
             if s["start"] <= left and right <= s["end"]
         ]
         if not active:
             parts.append(segment)
             continue
 
-        has_direct = any(
-            s["field"] == "statement"
-            and s["statement_type"] == "DIRECT"
-            for s in active
-        )
-        has_indirect = any(
-            s["field"] == "statement"
-            and s["statement_type"] == "INDIRECT"
-            for s in active
-        )
-        has_issue = any(s["field"] == "issue" for s in active)
+        statement_spans = [
+            s for s in active
+            if s["field"] == "statement"
+        ]
+        specific_spans = [
+            s for s in active
+            if s["field"] != "statement"
+        ]
 
-        classes = []
+        if specific_spans:
+            primary = max(
+                specific_spans,
+                key=lambda s: (
+                    EVIDENCE_FIELD_PRIORITY.get(s["field"], 0),
+                    -(s["end"] - s["start"]),
+                    s["label"],
+                ),
+            )
+        else:
+            primary = max(
+                statement_spans,
+                key=lambda s: (
+                    1 if s["statement_type"] == "DIRECT" else 0,
+                    -(s["end"] - s["start"]),
+                ),
+            )
+
+        classes = [primary["css"]]
+
+        # Preserve statement membership when a more-specific label occupies the
+        # same character interval.
+        statement_types = {
+            s["statement_type"]
+            for s in statement_spans
+        }
+        if specific_spans:
+            if "DIRECT" in statement_types:
+                classes.append("in-direct-statement")
+            elif "INDIRECT" in statement_types:
+                classes.append("in-indirect-statement")
+
         labels = []
-
-        if has_direct:
-            classes.append("ev-statement-direct")
-            labels.append("DIRECT statement")
-        elif has_indirect:
-            classes.append("ev-statement-indirect")
-            labels.append("INDIRECT statement")
-        elif has_issue:
-            classes.append("ev-issue")
-
-        if has_issue:
-            labels.append("ISSUE")
-            if has_direct or has_indirect:
-                classes.append("ev-has-issue")
+        for s in sorted(
+            active,
+            key=lambda x: (
+                -EVIDENCE_FIELD_PRIORITY.get(x["field"], 0),
+                x["label"],
+            ),
+        ):
+            tag = s["label"]
+            if tag not in labels:
+                labels.append(tag)
 
         parts.append(
             f'<span class="{" ".join(classes)}" '
@@ -315,31 +478,62 @@ def highlighted_evidence_text(text: str, events: List[dict]) -> str:
 
 
 def evidence_spans_dataframe(events: List[dict]) -> pd.DataFrame:
-    return pd.DataFrame([
-        {
-            "event_id": s.get("event_id"),
+    rows = []
+    for s in evidence_spans_for_events(events):
+        rows.append({
+            "event_ids": ", ".join(
+                str(x)
+                for x in s.get("event_ids", [])
+                if x is not None
+            ),
             "statement_type": s.get("statement_type"),
             "field": s.get("field"),
             "label": s.get("label"),
             "start": s.get("start"),
             "end": s.get("end"),
-        }
+        })
+    return pd.DataFrame(rows)
+
+
+def render_evidence_legend(type_filter: str, events: List[dict]):
+    """Show only evidence labels that are present in the current filter."""
+    labels_present = {
+        s["label"]
         for s in evidence_spans_for_events(events)
-    ])
+    }
 
-
-def render_evidence_legend(type_filter: str):
     chips = []
-    if type_filter in {"All", "Direct"}:
+
+    if "STATEMENT_DIRECT" in labels_present:
         chips.append(
-            '<span class="legend ev-statement-direct">Direct statement</span>'
+            '<span class="legend ev-statement-direct">STATEMENT · DIRECT</span>'
         )
-    if type_filter in {"All", "Indirect"}:
+    if "STATEMENT_INDIRECT" in labels_present:
         chips.append(
-            '<span class="legend ev-statement-indirect">Indirect statement</span>'
+            '<span class="legend ev-statement-indirect">STATEMENT · INDIRECT</span>'
         )
-    chips.append('<span class="legend ev-issue">Issue</span>')
-    st.markdown("".join(chips), unsafe_allow_html=True)
+
+    legend_specs = [
+        ({"CUE", "CUECOREF"}, "CUE / CUECOREF", "ev-cue"),
+        ({"PERSON", "PERSONCOREF"}, "PERSON / PERSONCOREF", "ev-speaker"),
+        ({"ROLE"}, "ROLE", "ev-role"),
+        ({"AFFILIATION"}, "AFFILIATION", "ev-affiliation"),
+        ({"DATETIME"}, "DATETIME", "ev-datetime"),
+        ({"LOCATION"}, "LOCATION", "ev-location"),
+        ({"EVENT"}, "EVENT", "ev-event"),
+        ({"ISSUE"}, "ISSUE", "ev-issue"),
+    ]
+
+    for labels, title, css in legend_specs:
+        if labels_present & labels:
+            chips.append(
+                f'<span class="legend {css}">{title}</span>'
+            )
+
+    st.markdown(
+        "".join(chips),
+        unsafe_allow_html=True,
+    )
 
 
 def render_legend():
@@ -466,7 +660,7 @@ def event_detail(event):
 st.markdown(f'<div class="hero"><h1>{APP_TITLE}</h1><p>Extract direct and indirect public-figure statements, inspect their evidence, and explore the resulting knowledge graph.</p></div>', unsafe_allow_html=True)
 
 steps = st.columns(3)
-steps[0].markdown('<div class="step"><div class="step-num">Step 1</div><div class="step-title">Enter news article</div><div class="step-text">Paste an Indonesian article or load an example.</div></div>', unsafe_allow_html=True)
+steps[0].markdown('<div class="step"><div class="step-num">Step 1</div><div class="step-title">Enter news article</div><div class="step-text">Choose an article from sample_news.csv or paste your own Indonesian news text.</div></div>', unsafe_allow_html=True)
 steps[1].markdown('<div class="step"><div class="step-num">Step 2</div><div class="step-title">Run inference</div><div class="step-text">Joint DIRECT + INDIRECT BILUO-CRF decoding, ISSUE sentence selection, and relations.</div></div>', unsafe_allow_html=True)
 steps[2].markdown('<div class="step"><div class="step-num">Step 3</div><div class="step-title">Explore the KG</div><div class="step-text">Compare DIRECT and INDIRECT StatementEvents and their graph relations.</div></div>', unsafe_allow_html=True)
 
@@ -530,22 +724,72 @@ with st.sidebar:
 bundle_ready = st.session_state.get("bundle") is not None and st.session_state.get("bundle_key") == model_key
 
 st.subheader("1. News article")
-example_col, id_col = st.columns([2, 1])
-example_name = example_col.selectbox("Example", list(EXAMPLES) + ["Custom article"], index=(list(EXAMPLES) + ["Custom article"]).index(st.session_state.example_name) if st.session_state.example_name in (list(EXAMPLES) + ["Custom article"]) else 0)
-if example_name != st.session_state.example_name:
-    st.session_state.example_name = example_name
-    if example_name in EXAMPLES:
-        st.session_state.news_text = EXAMPLES[example_name]["text"]
-        st.session_state.doc_id = EXAMPLES[example_name]["doc_id"]
-    st.session_state.result = None
-    st.rerun()
 
-doc_id = id_col.text_input("Document ID", value=st.session_state.doc_id)
-text = st.text_area("Article text", value=st.session_state.news_text, height=250, placeholder="Paste Indonesian news article here...")
-st.session_state.news_text = text
-st.session_state.doc_id = doc_id
+source_mode = st.radio(
+    "Article source",
+    ["Sample news", "Paste text"],
+    horizontal=True,
+    key="article_source_mode",
+)
 
-analyze = st.button("Analyze article", type="primary", use_container_width=True, disabled=not bundle_ready or len(text.strip()) < 20)
+if source_mode == "Sample news":
+    sample_labels = list(SAMPLE_NEWS)
+    if not sample_labels:
+        st.error("No valid sample article is available.")
+        doc_id, text = "", ""
+    else:
+        if st.session_state.get("sample_news_selection") not in SAMPLE_NEWS:
+            st.session_state.sample_news_selection = sample_labels[0]
+
+        selected_sample_label = st.selectbox(
+            "Sample article",
+            sample_labels,
+            key="sample_news_selection",
+        )
+        selected_sample = SAMPLE_NEWS[selected_sample_label]
+        doc_id = str(selected_sample.get("doc_id") or "").strip()
+        text = str(selected_sample.get("text") or "")
+
+        source_name = "sample_news.csv" if SAMPLE_NEWS_PATH.exists() else "built-in fallback samples"
+        st.caption(f"Loaded automatically from {source_name} · {len(SAMPLE_NEWS)} sample article(s) available.")
+
+        sample_meta, sample_id = st.columns([3, 1])
+        sample_meta.text_area(
+            "Article text",
+            value=text,
+            height=250,
+            disabled=True,
+            help="Switch to Paste text if you want to enter or edit another article.",
+        )
+        sample_id.text_input(
+            "Document ID",
+            value=doc_id,
+            disabled=True,
+        )
+else:
+    custom_id_col, _ = st.columns([1, 2])
+    doc_id = custom_id_col.text_input(
+        "Document ID (optional)",
+        key="custom_doc_id",
+        placeholder="Leave blank to generate one automatically",
+    )
+    text = st.text_area(
+        "Article text",
+        key="custom_news_text",
+        height=250,
+        placeholder="Paste Indonesian news article here...",
+    )
+
+current_input_signature = hashlib.sha1(
+    f"{source_mode}|{doc_id}|{text}".encode("utf-8")
+).hexdigest()
+
+analyze = st.button(
+    "Analyze article",
+    type="primary",
+    use_container_width=True,
+    disabled=not bundle_ready or len(text.strip()) < 20,
+)
 if not bundle_ready:
     st.caption("Load a compatible model artifact from the sidebar before running inference.")
 
@@ -558,13 +802,22 @@ if analyze:
                 st.session_state.bundle, text, final_doc_id, Path(cache_dir), relation_threshold, use_cache
             )
         st.session_state.result = {
-            "events": events, "spans": spans, "text": text, "doc_id": final_doc_id,
-            "elapsed": time.perf_counter() - started, "cache_hit": cache_hit,
+            "events": events,
+            "spans": spans,
+            "text": text,
+            "doc_id": final_doc_id,
+            "elapsed": time.perf_counter() - started,
+            "cache_hit": cache_hit,
+            "input_signature": current_input_signature,
         }
     except Exception as exc:
         st.error(f"Inference failed: {exc}")
 
 result = st.session_state.get("result")
+if result is not None and result.get("input_signature") != current_input_signature:
+    st.info("Article input changed. Click Analyze article to refresh the extraction result.")
+    result = None
+
 if result is not None:
     st.divider()
     st.subheader("2. Extraction result")
@@ -719,20 +972,19 @@ if result is not None:
                 if type_filter == "All":
                     st.caption(
                         f"All evidence: {direct_visible} DIRECT and "
-                        f"{indirect_visible} INDIRECT statement(s), plus related ISSUE evidence."
+                        f"{indirect_visible} INDIRECT StatementEvent(s), including "
+                        "STATEMENT, CUE, PERSON, ROLE, AFFILIATION, DATETIME, LOCATION, EVENT, and ISSUE where available."
                     )
                 elif type_filter == "Direct":
                     st.caption(
-                        f"DIRECT evidence only: {direct_visible} statement(s) "
-                        "plus related ISSUE evidence."
+                        f"DIRECT evidence only: {direct_visible} StatementEvent(s), with all available evidence labels."
                     )
                 else:
                     st.caption(
-                        f"INDIRECT evidence only: {indirect_visible} statement(s) "
-                        "plus related ISSUE evidence."
+                        f"INDIRECT evidence only: {indirect_visible} StatementEvent(s), with all available evidence labels."
                     )
 
-                render_evidence_legend(type_filter)
+                render_evidence_legend(type_filter, evidence_events)
 
                 st.markdown(
                     f'<div class="evidence-box">'

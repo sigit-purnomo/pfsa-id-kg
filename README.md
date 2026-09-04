@@ -104,3 +104,34 @@ StatementEvent [DIRECT or INDIRECT]
 ```
 
 `CUE` and `CUECOREF` remain extraction evidence rather than standalone KG relations.
+
+
+## Evidence view by statement type
+
+The Evidence view follows the global **Statement type** filter:
+
+- **All**: highlights every DIRECT and INDIRECT statement in the article and the ISSUE evidence related to those events.
+- **Direct**: highlights only DIRECT statements and their related ISSUE evidence.
+- **Indirect**: highlights only INDIRECT statements and their related ISSUE evidence.
+
+Evidence is therefore article-level. The statement navigator continues to control the currently selected event for Extraction and selected-statement graph inspection.
+
+## Layered Evidence rendering
+
+The Evidence view preserves the full statement-event annotation layer.
+
+- **All** shows evidence from every DIRECT and INDIRECT StatementEvent.
+- **Direct** shows all evidence fields belonging to DIRECT StatementEvents only.
+- **Indirect** shows all evidence fields belonging to INDIRECT StatementEvents only.
+
+For every visible event, the renderer keeps `STATEMENT`, `CUE/CUECOREF`,
+`PERSON/PERSONCOREF`, `ROLE`, `AFFILIATION`, `DATETIME`, `LOCATION`, `EVENT`,
+and `ISSUE` where those fields have grounded character offsets. When a specific
+label overlaps a STATEMENT span, the specific label keeps its own color and a
+thin outline indicates that the text also belongs to the statement span.
+
+## Article input
+
+The app automatically reads `sample_news.csv` from the same directory as `app.py`. Each valid row must contain at least `doc_id` and `text`; optional `title`, `name`, or `label` columns are used for friendlier dropdown labels.
+
+Users can choose **Sample news** to load a sample article automatically or **Paste text** to enter their own article. Switching input sources does not modify the CSV, and stale extraction results are hidden until the newly selected article is analyzed.
