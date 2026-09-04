@@ -135,3 +135,10 @@ thin outline indicates that the text also belongs to the statement span.
 The app automatically reads `sample_news.csv` from the same directory as `app.py`. Each valid row must contain at least `doc_id` and `text`; optional `title`, `name`, or `label` columns are used for friendlier dropdown labels.
 
 Users can choose **Sample news** to load a sample article automatically or **Paste text** to enter their own article. Switching input sources does not modify the CSV, and stale extraction results are hidden until the newly selected article is analyzed.
+
+## Sample CSV encoding
+
+`sample_news.csv` is loaded automatically using the first compatible encoding
+from `utf-8-sig`, `utf-8`, `cp1252`, and `latin1`. The UI shows the encoding
+actually used. If the CSV cannot be parsed, the app explicitly reports the error
+before falling back to built-in demonstration samples.

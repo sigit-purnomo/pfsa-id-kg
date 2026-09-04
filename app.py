@@ -73,41 +73,120 @@ def _sample_label(row: dict, index: int) -> str:
         or row.get("doc_id")
         or f"Sample {index + 1}"
     ).strip()
-    preview = re.sub(r"\\s+", " ", str(row.get("text") or "")).strip()
+    preview = re.sub(r"\s+", " ", str(row.get("text") or "")).strip()
     if len(preview) > 72:
         preview = preview[:69] + "..."
     return f"{title} · {preview}" if preview else title
 
 
+SAMPLE_NEWS_LOAD_INFO = {
+    "source": None,
+    "encoding": None,
+    "rows": 0,
+    "error": None,
+}
+
+
+def _read_sample_csv(path: Path):
+    """Read sample CSV using common encodings without silently discarding errors."""
+    attempts = []
+    for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin1"):
+        try:
+            df = pd.read_csv(path, encoding=encoding)
+            return df, encoding, attempts
+        except UnicodeDecodeError as exc:
+            attempts.append(f"{encoding}: {type(exc).__name__}")
+            continue
+        except Exception as exc:
+            attempts.append(f"{encoding}: {type(exc).__name__}: {exc}")
+            continue
+
+    raise RuntimeError(
+        "Could not read sample_news.csv with supported encodings. "
+        + " | ".join(attempts)
+    )
+
+
 def load_sample_news(path: Path = SAMPLE_NEWS_PATH) -> Dict[str, dict]:
-    """Load sample_news.csv automatically and return display-label -> article mapping."""
+    """Load sample_news.csv and return display-label -> article mapping."""
     samples: Dict[str, dict] = {}
+
+    SAMPLE_NEWS_LOAD_INFO.update({
+        "source": None,
+        "encoding": None,
+        "rows": 0,
+        "error": None,
+    })
 
     if path.exists():
         try:
-            df = pd.read_csv(path)
+            df, encoding, attempts = _read_sample_csv(path)
+
+            # Normalize headers in case a UTF BOM or surrounding spaces survived.
+            df.columns = [
+                str(col).replace("\ufeff", "").strip()
+                for col in df.columns
+            ]
+
             required = {"doc_id", "text"}
-            if required.issubset(df.columns):
-                for i, row in enumerate(df.fillna("").to_dict("records")):
-                    doc_id = str(row.get("doc_id") or "").strip()
-                    article_text = str(row.get("text") or "").strip()
-                    if not article_text:
-                        continue
-                    if not doc_id:
-                        doc_id = f"sample_{i + 1:03d}"
-                    item = {**row, "doc_id": doc_id, "text": article_text}
-                    label = _sample_label(item, i)
-                    # Keep labels unique even when titles/doc_ids repeat.
-                    if label in samples:
-                        label = f"{label} [{i + 1}]"
-                    samples[label] = item
-        except Exception:
+            missing = required - set(df.columns)
+            if missing:
+                raise ValueError(
+                    f"sample_news.csv is missing required column(s): {sorted(missing)}"
+                )
+
+            for i, row in enumerate(df.fillna("").to_dict("records")):
+                raw_doc_id = row.get("doc_id")
+                doc_id = str(raw_doc_id or "").strip()
+
+                # Avoid labels such as "1.0" when pandas inferred numeric IDs.
+                if isinstance(raw_doc_id, float) and raw_doc_id.is_integer():
+                    doc_id = str(int(raw_doc_id))
+
+                article_text = str(row.get("text") or "").strip()
+                if not article_text:
+                    continue
+
+                if not doc_id:
+                    doc_id = f"sample_{i + 1:03d}"
+
+                item = {
+                    **row,
+                    "doc_id": doc_id,
+                    "text": article_text,
+                }
+
+                label = _sample_label(item, i)
+                if label in samples:
+                    label = f"{label} [{i + 1}]"
+                samples[label] = item
+
+            SAMPLE_NEWS_LOAD_INFO.update({
+                "source": str(path),
+                "encoding": encoding,
+                "rows": len(samples),
+                "error": None,
+            })
+
+        except Exception as exc:
+            SAMPLE_NEWS_LOAD_INFO.update({
+                "source": str(path),
+                "encoding": None,
+                "rows": 0,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
             samples = {}
 
     if not samples:
         for i, item in enumerate(FALLBACK_EXAMPLES.values()):
             label = _sample_label(item, i)
             samples[label] = dict(item)
+
+        SAMPLE_NEWS_LOAD_INFO.update({
+            "source": "built-in fallback",
+            "encoding": None,
+            "rows": len(samples),
+        })
 
     return samples
 
@@ -751,8 +830,25 @@ if source_mode == "Sample news":
         doc_id = str(selected_sample.get("doc_id") or "").strip()
         text = str(selected_sample.get("text") or "")
 
-        source_name = "sample_news.csv" if SAMPLE_NEWS_PATH.exists() else "built-in fallback samples"
-        st.caption(f"Loaded automatically from {source_name} · {len(SAMPLE_NEWS)} sample article(s) available.")
+        load_source = SAMPLE_NEWS_LOAD_INFO.get("source")
+        load_encoding = SAMPLE_NEWS_LOAD_INFO.get("encoding")
+        load_error = SAMPLE_NEWS_LOAD_INFO.get("error")
+
+        if load_source == "built-in fallback":
+            st.caption(
+                f"Using built-in fallback samples · {len(SAMPLE_NEWS)} article(s)."
+            )
+            if load_error:
+                st.warning(
+                    "sample_news.csv could not be loaded: "
+                    f"{load_error}"
+                )
+        else:
+            encoding_text = f" · encoding: {load_encoding}" if load_encoding else ""
+            st.caption(
+                f"Loaded from sample_news.csv{encoding_text} · "
+                f"{len(SAMPLE_NEWS)} sample article(s) available."
+            )
 
         sample_meta, sample_id = st.columns([3, 1])
         sample_meta.text_area(
