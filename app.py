@@ -92,6 +92,9 @@ st.markdown(
     .type-indirect {background:#fef3c7; color:#b45309; border:1px solid #fcd34d;}
     .evidence-box {border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem 1.1rem; line-height: 1.9; background: #fff;}
     .ev-statement {background:#dbeafe; border-bottom:2px solid #2563eb; padding:.06rem .1rem; border-radius:3px;}
+    .ev-statement-direct {background:#dbeafe; border-bottom:2px solid #2563eb; padding:.06rem .1rem; border-radius:3px;}
+    .ev-statement-indirect {background:#fef3c7; border-bottom:2px solid #d97706; padding:.06rem .1rem; border-radius:3px;}
+    .ev-has-issue {box-shadow: inset 0 -3px 0 #e11d48;}
     .ev-cue {background:#fef3c7; border-bottom:2px solid #d97706; padding:.06rem .1rem; border-radius:3px;}
     .ev-speaker {background:#dcfce7; border-bottom:2px solid #16a34a; padding:.06rem .1rem; border-radius:3px;}
     .ev-role {background:#f3e8ff; border-bottom:2px solid #9333ea; padding:.06rem .1rem; border-radius:3px;}
@@ -193,6 +196,150 @@ def highlighted_text(text, event):
         cursor = span["end"]
     parts.append(html.escape(text[cursor:]))
     return "".join(parts).replace("\n", "<br>")
+
+
+def evidence_spans_for_events(events: List[dict]) -> List[dict]:
+    """Return statement and ISSUE evidence for all currently visible events."""
+    spans = []
+    seen = set()
+
+    for event in events:
+        statement_type = str(event.get("statement_type") or "").upper()
+
+        statement = event.get("statement") or {}
+        if statement.get("start") is not None and statement.get("end") is not None:
+            start, end = int(statement["start"]), int(statement["end"])
+            label = (
+                "DIRECT statement"
+                if statement_type == "DIRECT"
+                else "INDIRECT statement"
+            )
+            key = (start, end, label)
+            if key not in seen:
+                spans.append({
+                    "event_id": event.get("event_id"),
+                    "statement_type": statement_type,
+                    "field": "statement",
+                    "label": label,
+                    "start": start,
+                    "end": end,
+                })
+                seen.add(key)
+
+        issue = event.get("issue") or {}
+        if issue.get("start") is not None and issue.get("end") is not None:
+            start, end = int(issue["start"]), int(issue["end"])
+            key = (start, end, "ISSUE")
+            if key not in seen:
+                spans.append({
+                    "event_id": event.get("event_id"),
+                    "statement_type": statement_type,
+                    "field": "issue",
+                    "label": "ISSUE",
+                    "start": start,
+                    "end": end,
+                })
+                seen.add(key)
+
+    return sorted(
+        spans,
+        key=lambda s: (s["start"], s["end"], s["label"]),
+    )
+
+
+def highlighted_evidence_text(text: str, events: List[dict]) -> str:
+    """Highlight all visible statement spans and their ISSUE evidence."""
+    spans = [
+        s for s in evidence_spans_for_events(events)
+        if 0 <= s["start"] < s["end"] <= len(text)
+    ]
+    if not spans:
+        return html.escape(text).replace("\n", "<br>")
+
+    boundaries = {0, len(text)}
+    for span in spans:
+        boundaries.add(span["start"])
+        boundaries.add(span["end"])
+    boundaries = sorted(boundaries)
+
+    parts = []
+    for left, right in zip(boundaries[:-1], boundaries[1:]):
+        if left >= right:
+            continue
+
+        segment = html.escape(text[left:right])
+        active = [
+            s for s in spans
+            if s["start"] <= left and right <= s["end"]
+        ]
+        if not active:
+            parts.append(segment)
+            continue
+
+        has_direct = any(
+            s["field"] == "statement"
+            and s["statement_type"] == "DIRECT"
+            for s in active
+        )
+        has_indirect = any(
+            s["field"] == "statement"
+            and s["statement_type"] == "INDIRECT"
+            for s in active
+        )
+        has_issue = any(s["field"] == "issue" for s in active)
+
+        classes = []
+        labels = []
+
+        if has_direct:
+            classes.append("ev-statement-direct")
+            labels.append("DIRECT statement")
+        elif has_indirect:
+            classes.append("ev-statement-indirect")
+            labels.append("INDIRECT statement")
+        elif has_issue:
+            classes.append("ev-issue")
+
+        if has_issue:
+            labels.append("ISSUE")
+            if has_direct or has_indirect:
+                classes.append("ev-has-issue")
+
+        parts.append(
+            f'<span class="{" ".join(classes)}" '
+            f'title="{html.escape(" + ".join(labels), quote=True)}">'
+            f'{segment}</span>'
+        )
+
+    return "".join(parts).replace("\n", "<br>")
+
+
+def evidence_spans_dataframe(events: List[dict]) -> pd.DataFrame:
+    return pd.DataFrame([
+        {
+            "event_id": s.get("event_id"),
+            "statement_type": s.get("statement_type"),
+            "field": s.get("field"),
+            "label": s.get("label"),
+            "start": s.get("start"),
+            "end": s.get("end"),
+        }
+        for s in evidence_spans_for_events(events)
+    ])
+
+
+def render_evidence_legend(type_filter: str):
+    chips = []
+    if type_filter in {"All", "Direct"}:
+        chips.append(
+            '<span class="legend ev-statement-direct">Direct statement</span>'
+        )
+    if type_filter in {"All", "Indirect"}:
+        chips.append(
+            '<span class="legend ev-statement-indirect">Indirect statement</span>'
+        )
+    chips.append('<span class="legend ev-issue">Issue</span>')
+    st.markdown("".join(chips), unsafe_allow_html=True)
 
 
 def render_legend():
@@ -557,15 +704,52 @@ if result is not None:
                     )
 
             elif active_view == "Evidence":
-                render_legend()
+                # Evidence is article-level and follows the global Statement type filter.
+                evidence_events = filtered_events
+
+                direct_visible = sum(
+                    str(e.get("statement_type") or "").upper() == "DIRECT"
+                    for e in evidence_events
+                )
+                indirect_visible = sum(
+                    str(e.get("statement_type") or "").upper() == "INDIRECT"
+                    for e in evidence_events
+                )
+
+                if type_filter == "All":
+                    st.caption(
+                        f"All evidence: {direct_visible} DIRECT and "
+                        f"{indirect_visible} INDIRECT statement(s), plus related ISSUE evidence."
+                    )
+                elif type_filter == "Direct":
+                    st.caption(
+                        f"DIRECT evidence only: {direct_visible} statement(s) "
+                        "plus related ISSUE evidence."
+                    )
+                else:
+                    st.caption(
+                        f"INDIRECT evidence only: {indirect_visible} statement(s) "
+                        "plus related ISSUE evidence."
+                    )
+
+                render_evidence_legend(type_filter)
+
                 st.markdown(
-                    f'<div class="evidence-box">{highlighted_text(result["text"], selected_event)}</div>',
+                    f'<div class="evidence-box">'
+                    f'{highlighted_evidence_text(result["text"], evidence_events)}'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
-                with st.expander("Detected BILUO spans"):
-                    span_df = spans_to_dataframe(result["spans"], result["doc_id"])
-                    st.dataframe(span_df, hide_index=True, use_container_width=True)
-                with st.expander("Raw StatementEvent JSON"):
+
+                with st.expander("Evidence spans in current filter"):
+                    evidence_df = evidence_spans_dataframe(evidence_events)
+                    st.dataframe(
+                        evidence_df,
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+
+                with st.expander("Selected StatementEvent JSON"):
                     st.json(selected_event)
 
             else:
